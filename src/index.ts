@@ -36,8 +36,10 @@ interface ExtensionSettings {
   promptPresets: Record<string, PromptPreset>;
 }
 
-const VERSION = '0.1.1';
+const VERSION = '0.1.2';
 const FORMAT_VERSION = 'F_1.0';
+const HANDLEBARS_OPEN_TOKEN = '__MAGIC_TRANSLATION_HANDLEBARS_OPEN__';
+const HANDLEBARS_CLOSE_TOKEN = '__MAGIC_TRANSLATION_HANDLEBARS_CLOSE__';
 
 const DEFAULT_PROMPT = `# Task: Translate Text
 
@@ -91,6 +93,36 @@ const settingsManager = new ExtensionSettingsManager<ExtensionSettings>(EXTENSIO
 
 const incomingTypes = [AutoModeOptions.RESPONSES, AutoModeOptions.BOTH];
 const outgoingTypes = [AutoModeOptions.INPUT, AutoModeOptions.BOTH];
+
+function escapeHandlebarsTokens<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value
+      .split('{{')
+      .join(HANDLEBARS_OPEN_TOKEN)
+      .split('}}')
+      .join(HANDLEBARS_CLOSE_TOKEN) as T;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => escapeHandlebarsTokens(item)) as T;
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entryValue]) => [key, escapeHandlebarsTokens(entryValue)]),
+    ) as T;
+  }
+
+  return value;
+}
+
+function restoreHandlebarsTokens(value: string): string {
+  return value
+    .split(HANDLEBARS_OPEN_TOKEN)
+    .join('{{')
+    .split(HANDLEBARS_CLOSE_TOKEN)
+    .join('}}');
+}
 
 async function initUI() {
   if (!context.extensionSettings.connectionManager) {
@@ -380,6 +412,7 @@ async function translateText(
     message: messageId !== undefined ? context.chat[messageId] : undefined,
     ...extraParams,
   };
+  const escapedExtraParams = escapeHandlebarsTokens(allExtraParams);
 
   const prompt = context.substituteParams(
     selectedPreset.content,
@@ -388,13 +421,12 @@ async function translateText(
     undefined,
     undefined,
     undefined,
-    allExtraParams,
+    escapedExtraParams,
   );
 
-  const template = Handlebars.compile(prompt, { noEscape: true });
-  const renderedPrompt = template(allExtraParams);
-
   try {
+    const template = Handlebars.compile(prompt, { noEscape: true });
+    const renderedPrompt = restoreHandlebarsTokens(template(escapedExtraParams));
     const response = await sendGenerateRequest(selectedProfileId, renderedPrompt);
     if (!response) {
       return null;
