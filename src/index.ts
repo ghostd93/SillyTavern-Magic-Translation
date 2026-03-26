@@ -36,7 +36,7 @@ interface ExtensionSettings {
   promptPresets: Record<string, PromptPreset>;
 }
 
-const VERSION = '0.1.2';
+const VERSION = '0.1.3';
 const FORMAT_VERSION = 'F_1.0';
 const HANDLEBARS_OPEN_TOKEN = '__MAGIC_TRANSLATION_HANDLEBARS_OPEN__';
 const HANDLEBARS_CLOSE_TOKEN = '__MAGIC_TRANSLATION_HANDLEBARS_CLOSE__';
@@ -414,18 +414,8 @@ async function translateText(
   };
   const escapedExtraParams = escapeHandlebarsTokens(allExtraParams);
 
-  const prompt = context.substituteParams(
-    selectedPreset.content,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    escapedExtraParams,
-  );
-
   try {
-    const template = Handlebars.compile(prompt, { noEscape: true });
+    const template = Handlebars.compile(selectedPreset.content, { noEscape: true });
     const renderedPrompt = restoreHandlebarsTokens(template(escapedExtraParams));
     const response = await sendGenerateRequest(selectedProfileId, renderedPrompt);
     if (!response) {
