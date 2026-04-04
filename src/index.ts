@@ -36,7 +36,7 @@ interface ExtensionSettings {
   promptPresets: Record<string, PromptPreset>;
 }
 
-const VERSION = '0.1.6';
+const VERSION = '0.1.7';
 const FORMAT_VERSION = 'F_1.0';
 const HANDLEBARS_OPEN_TOKEN = '__MAGIC_TRANSLATION_HANDLEBARS_OPEN__';
 const HANDLEBARS_CLOSE_TOKEN = '__MAGIC_TRANSLATION_HANDLEBARS_CLOSE__';
@@ -499,7 +499,7 @@ async function generateMessage(messageId: number, type: 'userInput' | 'incomingM
     return;
   }
 
-  const languageCode = type === 'userInput' ? settings.internalLanguage : settings.targetLanguage;
+  const languageCode = type === 'incomingMessage' ? settings.targetLanguage : settings.internalLanguage;
 
   const extraParams: Record<string, string> = {};
 
