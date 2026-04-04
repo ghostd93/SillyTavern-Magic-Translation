@@ -36,7 +36,7 @@ interface ExtensionSettings {
   promptPresets: Record<string, PromptPreset>;
 }
 
-const VERSION = '0.1.5';
+const VERSION = '0.1.6';
 const FORMAT_VERSION = 'F_1.0';
 const HANDLEBARS_OPEN_TOKEN = '__MAGIC_TRANSLATION_HANDLEBARS_OPEN__';
 const HANDLEBARS_CLOSE_TOKEN = '__MAGIC_TRANSLATION_HANDLEBARS_CLOSE__';
@@ -453,9 +453,9 @@ async function translateText(
 
     let displayText = response;
     if (selectedPreset.filterCodeBlock) {
-      const codeBlockMatch = response.match(/^(?:[^`]*?)\n?```[\s\S]*?\n([\s\S]*?)```(?![^`]*```)/);
-      if (codeBlockMatch) {
-        displayText = codeBlockMatch[1].trim();
+      const codeBlockMatches = [...response.matchAll(/```[^\n]*\n([\s\S]*?)```/g)];
+      if (codeBlockMatches.length > 0) {
+        displayText = codeBlockMatches[codeBlockMatches.length - 1][1].trim();
       }
     }
     return postprocessFontTags(displayText, fontColors);
