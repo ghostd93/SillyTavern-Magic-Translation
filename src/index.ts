@@ -36,39 +36,32 @@ interface ExtensionSettings {
   promptPresets: Record<string, PromptPreset>;
 }
 
-const VERSION = '0.1.4';
+const VERSION = '0.1.5';
 const FORMAT_VERSION = 'F_1.0';
 const HANDLEBARS_OPEN_TOKEN = '__MAGIC_TRANSLATION_HANDLEBARS_OPEN__';
 const HANDLEBARS_CLOSE_TOKEN = '__MAGIC_TRANSLATION_HANDLEBARS_CLOSE__';
-const FONT_MARKER_OPEN = '[MT';
-const FONT_MARKER_CLOSE = ']';
-const FONT_MARKER_END = '[/MT]';
-
-interface FontTagEntry {
-  index: number;
-  openTag: string;
+interface FontColorEntry {
+  color: string;
 }
 
-function preprocessFontTags(text: string): { text: string; entries: FontTagEntry[] } {
-  const entries: FontTagEntry[] = [];
-  let idx = 0;
-  const processed = text
-    .replace(/<font\s+([^>]*)>/gi, (match) => {
-      entries.push({ index: idx, openTag: match });
-      return `${FONT_MARKER_OPEN}${idx}${FONT_MARKER_CLOSE}`;
-    })
-    .replace(/<\/font>/gi, FONT_MARKER_END);
-  return { text: processed, entries };
+function preprocessFontTags(text: string): { text: string; colors: FontColorEntry[] } {
+  const colors: FontColorEntry[] = [];
+  const processed = text.replace(/<font\s+color\s*=\s*"([^"]*)"\s*>([\s\S]*?)<\/font>/gi, (_match, color, inner) => {
+    colors.push({ color });
+    return inner;
+  });
+  return { text: processed, colors };
 }
 
-function postprocessFontTags(text: string, entries: FontTagEntry[]): string {
-  let result = text;
-  for (const entry of entries) {
-    const marker = `${FONT_MARKER_OPEN}${entry.index}${FONT_MARKER_CLOSE}`;
-    result = result.split(marker).join(entry.openTag);
-  }
-  result = result.split(FONT_MARKER_END).join('</font>');
-  return result;
+function postprocessFontTags(text: string, colors: FontColorEntry[]): string {
+  if (colors.length === 0) return text;
+  let colorIdx = 0;
+  return text.replace(/"[^"]*"/g, (match) => {
+    if (colorIdx >= colors.length) return match;
+    const color = colors[colorIdx].color;
+    colorIdx++;
+    return `<font color="${color}">${match}</font>`;
+  });
 }
 
 const DEFAULT_PROMPT = `# Task: Translate Text
@@ -438,7 +431,7 @@ async function translateText(
     return null;
   }
 
-  const { text: preprocessedText, entries: fontEntries } = preprocessFontTags(text);
+  const { text: preprocessedText, colors: fontColors } = preprocessFontTags(text);
 
   const allExtraParams: Record<string, any> = {
     prompt: preprocessedText,
@@ -465,7 +458,7 @@ async function translateText(
         displayText = codeBlockMatch[1].trim();
       }
     }
-    return postprocessFontTags(displayText, fontEntries);
+    return postprocessFontTags(displayText, fontColors);
   } catch (error) {
     console.error(error);
     st_echo('error', `Translation failed: ${error}`);
