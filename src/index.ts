@@ -36,10 +36,40 @@ interface ExtensionSettings {
   promptPresets: Record<string, PromptPreset>;
 }
 
-const VERSION = '0.1.3';
+const VERSION = '0.1.4';
 const FORMAT_VERSION = 'F_1.0';
 const HANDLEBARS_OPEN_TOKEN = '__MAGIC_TRANSLATION_HANDLEBARS_OPEN__';
 const HANDLEBARS_CLOSE_TOKEN = '__MAGIC_TRANSLATION_HANDLEBARS_CLOSE__';
+const FONT_MARKER_OPEN = '[MT';
+const FONT_MARKER_CLOSE = ']';
+const FONT_MARKER_END = '[/MT]';
+
+interface FontTagEntry {
+  index: number;
+  openTag: string;
+}
+
+function preprocessFontTags(text: string): { text: string; entries: FontTagEntry[] } {
+  const entries: FontTagEntry[] = [];
+  let idx = 0;
+  const processed = text
+    .replace(/<font\s+([^>]*)>/gi, (match) => {
+      entries.push({ index: idx, openTag: match });
+      return `${FONT_MARKER_OPEN}${idx}${FONT_MARKER_CLOSE}`;
+    })
+    .replace(/<\/font>/gi, FONT_MARKER_END);
+  return { text: processed, entries };
+}
+
+function postprocessFontTags(text: string, entries: FontTagEntry[]): string {
+  let result = text;
+  for (const entry of entries) {
+    const marker = `${FONT_MARKER_OPEN}${entry.index}${FONT_MARKER_CLOSE}`;
+    result = result.split(marker).join(entry.openTag);
+  }
+  result = result.split(FONT_MARKER_END).join('</font>');
+  return result;
+}
 
 const DEFAULT_PROMPT = `# Task: Translate Text
 
@@ -96,11 +126,7 @@ const outgoingTypes = [AutoModeOptions.INPUT, AutoModeOptions.BOTH];
 
 function escapeHandlebarsTokens<T>(value: T): T {
   if (typeof value === 'string') {
-    return value
-      .split('{{')
-      .join(HANDLEBARS_OPEN_TOKEN)
-      .split('}}')
-      .join(HANDLEBARS_CLOSE_TOKEN) as T;
+    return value.split('{{').join(HANDLEBARS_OPEN_TOKEN).split('}}').join(HANDLEBARS_CLOSE_TOKEN) as T;
   }
 
   if (Array.isArray(value)) {
@@ -117,11 +143,7 @@ function escapeHandlebarsTokens<T>(value: T): T {
 }
 
 function restoreHandlebarsTokens(value: string): string {
-  return value
-    .split(HANDLEBARS_OPEN_TOKEN)
-    .join('{{')
-    .split(HANDLEBARS_CLOSE_TOKEN)
-    .join('}}');
+  return value.split(HANDLEBARS_OPEN_TOKEN).join('{{').split(HANDLEBARS_CLOSE_TOKEN).join('}}');
 }
 
 async function initUI() {
@@ -255,10 +277,14 @@ async function initSettings() {
   const extendedLanguageCodes = Object.entries(languageCodes).reduce(
     (acc, [name, code]) => {
       // @ts-ignore
-      acc[code] = { name: name, selected: code === settings.targetLanguage };
+      acc[code] = {
+        name: name,
+        selected: code === settings.targetLanguage,
+        internalSelected: code === settings.internalLanguage,
+      };
       return acc;
     },
-    {} as Record<string, { name: string; selected: boolean }>,
+    {} as Record<string, { name: string; selected: boolean; internalSelected: boolean }>,
   );
 
   const settingsHtml = await context.renderExtensionTemplateAsync(
@@ -356,6 +382,14 @@ async function initSettings() {
     settingsManager.saveSettings();
   });
 
+  const internalLanguageElement = settingsElement.find('.internal_language');
+  internalLanguageElement.val(settings.internalLanguage);
+  internalLanguageElement.on('change', function () {
+    const internalLanguage = internalLanguageElement.val() as string;
+    settings.internalLanguage = internalLanguage;
+    settingsManager.saveSettings();
+  });
+
   const autoModeElement = settingsElement.find('.auto_mode');
   autoModeElement.val(settings.autoMode);
   autoModeElement.on('change', function () {
@@ -404,8 +438,10 @@ async function translateText(
     return null;
   }
 
+  const { text: preprocessedText, entries: fontEntries } = preprocessFontTags(text);
+
   const allExtraParams: Record<string, any> = {
-    prompt: text,
+    prompt: preprocessedText,
     language: languageText,
     chat: structuredClone(context.chat).slice(0, messageId).reverse(),
     name: messageId !== undefined ? context.chat[messageId].name : name1,
@@ -429,7 +465,7 @@ async function translateText(
         displayText = codeBlockMatch[1].trim();
       }
     }
-    return displayText;
+    return postprocessFontTags(displayText, fontEntries);
   } catch (error) {
     console.error(error);
     st_echo('error', `Translation failed: ${error}`);

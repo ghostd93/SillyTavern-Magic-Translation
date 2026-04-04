@@ -32,6 +32,13 @@
                     {{/each}}
                 </select>
 
+                <label>Internal Language</label>
+                <select class="text_pole internal_language" title="Select an Internal Language">
+                    {{#each languageCodes}}
+                    <option value="{{@key}}" {{#if this.internalSelected}}selected{{/if}}>{{this.name}}</option>
+                    {{/each}}
+                </select>
+
                 <div class="title_restorable">
                     <label>Prompt Preset</label>
                 </div>
